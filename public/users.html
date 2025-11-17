@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Usuarios Registrados</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<div class="container mt-5">
+    <h2 class="text-center mb-4">Usuarios Registrados</h2>
+
+    <button class="btn btn-info mb-3" onclick="loadCurrent()">Ver Usuario Actual</button>
+    <button class="btn btn-secondary mb-3" onclick="logout()">Cerrar Sesión</button>
+
+    <table class="table table-striped mt-4">
+        <thead class="table-dark">
+            <tr>
+                <th>Nombre</th>
+                <th>Correo</th>
+                <th>Edad</th>
+                <th>Rol</th>
+            </tr>
+        </thead>
+        <tbody id="usersTable"></tbody>
+    </table>
+
+    <div id="currentUser" class="mt-4"></div>
+
+    <a href="index.html" class="btn btn-dark mt-4">Volver</a>
+</div>
+
+<script>
+async function loadUsers() {
+    const token = localStorage.getItem("token");
+    if (!token) return alert("No estás autenticado");
+
+    const res = await fetch("/api/users", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+
+    const json = await res.json();
+    if (json.status !== "success") return alert("Error cargando usuarios");
+
+    const tbody = document.getElementById("usersTable");
+    tbody.innerHTML = "";
+
+    json.payload.forEach(u => {
+        tbody.innerHTML += `
+            <tr>
+                <td>${u.first_name} ${u.last_name}</td>
+                <td>${u.email}</td>
+                <td>${u.age || "-"}</td>
+                <td>${u.role}</td>
+            </tr>
+        `;
+    });
+}
+
+async function loadCurrent() {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch("/api/sessions/current", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+
+    const json = await res.json();
+
+    if (json.status !== "success") {
+        return document.getElementById("currentUser").innerHTML =
+            `<div class="alert alert-danger">Token inválido o expirado</div>`;
+    }
+
+    const u = json.payload;
+    document.getElementById("currentUser").innerHTML = `
+        <div class="alert alert-info">
+            Usuario actual: <strong>${u.first_name} ${u.last_name}</strong> <br>
+            Email: ${u.email} <br>
+            Rol: ${u.role}
+        </div>
+    `;
+}
+
+function logout() {
+    localStorage.removeItem("token");
+    window.location.href = "login.html";
+}
+
+loadUsers();
+</script>
+
+</body>
+</html>
