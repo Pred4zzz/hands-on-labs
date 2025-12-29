@@ -2,6 +2,11 @@ import { Router } from "express";
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
 import passport from "../config/passport.js";
+import Cart from "../models/cart.js";
+import Product from "../models/Product.js";
+import Ticket from "../models/ticket.js";
+import { authorize } from "../middlewares/authorization.js";
+
 
 const router = Router();
 
@@ -65,5 +70,77 @@ router.delete('/:id', passport.authenticate("jwt", { session: false }), async (r
         res.status(400).send({ status: 'error', message: error.message });
     }
 });
+
+// POST agregar producto al carrito (SOLO USER)
+router.post(
+  "/cart",
+  passport.authenticate("jwt", { session: false }),
+  authorize(["user"]),
+  async (req, res) => {
+    try {
+      const { productId, quantity } = req.body;
+
+      let cart = await Cart.findOne({ user: req.user._id });
+      if (!cart) {
+        cart = await Cart.create({
+          user: req.user._id,
+          products: []
+        });
+      }
+
+      cart.products.push({ product: productId, quantity });
+      await cart.save();
+
+      res.send({ status: "success", payload: cart });
+    } catch (error) {
+      res.status(500).send({ status: "error", message: error.message });
+    }
+  }
+);
+
+// POST compra carrito (SOLO USER)
+router.post(
+  "/purchase",
+  passport.authenticate("jwt", { session: false }),
+  authorize(["user"]),
+  async (req, res) => {
+    try {
+      const cart = await Cart.findOne({ user: req.user._id }).populate("products.product");
+
+      if (!cart || cart.products.length === 0) {
+        return res.status(400).send({ status: "error", message: "Carrito vacío" });
+      }
+
+      let total = 0;
+      const remainingProducts = [];
+
+      for (const item of cart.products) {
+        if (item.product.stock >= item.quantity) {
+          item.product.stock -= item.quantity;
+          await item.product.save();
+          total += item.product.price * item.quantity;
+        } else {
+          remainingProducts.push(item);
+        }
+      }
+
+      const ticket = await Ticket.create({
+        amount: total,
+        purchaser: req.user.email
+      });
+
+      cart.products = remainingProducts;
+      await cart.save();
+
+      res.send({
+        status: "success",
+        ticket,
+        remainingProducts
+      });
+    } catch (error) {
+      res.status(500).send({ status: "error", message: error.message });
+    }
+  }
+);
 
 export default router;
